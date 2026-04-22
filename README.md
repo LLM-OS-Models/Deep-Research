@@ -1,60 +1,73 @@
 # Deep-Research
 
-브라우징/리서치형 에이전트와 외부 deep-research 트랙 비교를 위한 프로젝트입니다.
+딥 리서치 에이전트 평가 트랙.
 
-## 목표
-- 검색 기반 답변 생성
-- citation 포함 응답
-- 내부 평가와 외부 deep-research 방향성 비교
+질문이 주어지면, 모델이 상세한 답변을 생성하고 신뢰할 수 있는 출처(citation)를 포함하는 능력을 평가한다. 답변 정확도와 인용 신뢰도를 모두 측정하여, 단순한 사실 나열이 아닌 근거 기반 응답을 요구한다.
+
+## 평가 메트릭
+
+| 메트릭 | 설명 |
+|--------|------|
+| `answer_accuracy_proxy` | 응답 길이 >= 20자 (0/1) |
+| `answer_accuracy` | gold required_content 키워드 중 응답에 포함된 비율 (0~1) |
+| `citation_support_proxy` | 인용을 포함했는지 (0/1) |
+| `citation_support` | gold required_citations 중 모델 인용에 포함된 비율 (0~1) |
+
+**성공 조건**: `answer_accuracy >= 0.5 AND citation_support > 0`
+
+## 샘플 데이터 형식
+
+```json
+{
+  "sample_id": "research_0001",
+  "user_query": "최근 오픈소스 terminal agent 벤치마크 중 널리 쓰이는 것을 2개만 비교해줘.",
+  "artifacts": {"allowed_tools": ["web_search", "open_page"]},
+  "gold": {
+    "required_content": ["Terminal-Bench", "Terminal-Bench 2.0"],
+    "required_citations": ["github.com", "arxiv.org"]
+  }
+}
+```
+
+## 모델 출력 형식
+
+```
+ANSWER: 질문에 대한 상세한 답변
+CITATIONS: [https://example.com/source1, https://arxiv.org/abs/...]
+```
+
+## 프로젝트 구조
+
+```
+Deep-Research/
+├── README.md
+├── pyproject.toml
+├── eval/
+│   ├── internal/
+│   │   └── v0.jsonl        # 평가 데이터셋 (2샘플)
+│   └── results/
+├── tests/
+└── data/
+```
 
 ## 실행
+
 ```bash
-uv sync --extra dev
+uv sync
+
+llm-os-eval run deep_research \
+  --model Qwen/Qwen3-4B \
+  --samples eval/internal/v0.jsonl \
+  --output eval/results/Qwen3-4B_v0.jsonl \
+  --base-url http://localhost:8001/v1
 ```
 
-## 평가 파이프라인
+## 벤치마크 결과 (2026-04-23, Round 3)
 
-### 디렉토리 구조
-```
-eval/
-├── eval_runner.py      # → llm-os-eval-core (symlink)
-├── summarize.py        # → llm-os-eval-core (symlink)
-├── run_phase1.sh       # 8-GPU 병렬 평가 (소형~중형 모델)
-├── run_phase2.sh       # 추가 모델 평가 (Qwen3.6-27B, LFM 계열)
-└── internal/v1.jsonl   # 평가 데이터셋
-data/
-├── prepare_sft.py      # → llm-os-eval-core (symlink)
-├── sft_train.py        # → llm-os-eval-core (symlink)
-└── sft/                # SFT 학습 데이터
-    ├── train.jsonl
-    └── val.jsonl
-```
+| 모델 | Size | answer_accuracy | citation_support | 성공률 |
+|------|------|----------------|-----------------|--------|
+| Nemotron-Terminal-8B | 8B | 17% | **25%** | 0% |
+| Qwen2.5-14B-Instruct | 14B | 17% | **25%** | 0% |
+| 나머지 전체 | — | 17% | 0% | 0% |
 
-### 실행 방법
-```bash
-# Phase 1: 소형~중형 모델 8종 병렬 평가
-bash eval/run_phase1.sh
-
-# Phase 2: 추가 모델 평가 (Qwen3.6-27B, LFM2-24B-A2B, LFM2.5-1.2B-Instruct)
-bash eval/run_phase2.sh
-
-# 결과 요약
-python eval/summarize.py --results-dir eval/results
-```
-
-### 평가 모델
-
-**Phase 1** (8-GPU 병렬):
-- GPU0: Qwen3.5-4B
-- GPU1: gemma-4-E2B-it
-- GPU2: gemma-4-E4B-it
-- GPU3: Qwen3.5-9B-text-only
-- GPU4: LFM2-2.6B
-- GPU5: Qwen3.5-27B
-- GPU6: Qwen3.5-35B-A3B
-- GPU7: LFM2-8B-A1B
-
-**Phase 2** (추가):
-- Qwen/Qwen3.6-27B
-- LiquidAI/LFM2-24B-A2B (23.84B MoE)
-- LiquidAI/LFM2.5-1.2B-Instruct
+모든 모델이 answer_accuracy 17% (6개 키워드 중 1개 매칭)를 기록한다. Citation의 경우 실제 웹 검색이 불가능한 환경에서는 도메인(github.com, arxiv.org)을 포함한 URL을 생성하기 어렵다. 답변 내용은 관련성이 있으나, 평가 기준인 특정 키워드 포함과 인용 URL 생성 요구사항을 충족하지 못한다.
