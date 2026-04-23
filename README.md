@@ -15,6 +15,8 @@
 
 **성공 조건**: `answer_accuracy >= 0.5 AND citation_support > 0`
 
+> **참고**: 평가 파이프라인은 multi-query decomposition을 지원한다. 복잡한 질문은 하위 질문으로 분해되어 각각 독립적으로 평가된 후 결과가 통합된다.
+
 ## 샘플 데이터 형식
 
 ```json
